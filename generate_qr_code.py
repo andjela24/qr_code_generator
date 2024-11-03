@@ -1,61 +1,84 @@
 import qrcode
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
+import os
+import warnings
 
-# Function to create a QR code with a logo
-def create_qr_with_logo(data, logo_path, output_path, text=None, logo_size_ratio=0.25):
-    # Step 1: Generate the QR code
-    qr = qrcode.QRCode(
-        version=1,  # Version can be adjusted
-        error_correction=qrcode.constants.ERROR_CORRECT_H,  # High error correction
-        box_size=10,  # Size of each box in the QR code grid
-        border=4,  # Width of the border (in boxes)
-    )
-    qr.add_data(data)
-    qr.make(fit=True)
+# For ignoring warnings
+warnings.filterwarnings("ignore")
 
-    # Create the QR code image
-    qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
+####################################
+# Enter your text or URL
+YOUR_TEXT_OR_URL = 'https://andjelaljubenkovic.rs/'  # Your website link
+####################################
+# Set size of the logo
+logosize = 75
+####################################
 
-    # Step 2: Open the logo image
-    logo = Image.open(logo_path).convert("RGBA")
+# Set path to your file from command line arguments
+import sys
+infile = sys.argv[-1]  # This will take the image path from command line arguments
+####################################
 
-    # Resize the logo
-    logo_size = int(qr_img.size[0] * logo_size_ratio)  # Calculate size based on QR code size
-    logo = logo.resize((logo_size, logo_size))  # Removed Image.ANTIALIAS
+# Convert RGB to HEX function
+def rgb_to_hex(rgb):
+    return '#' + '%02x%02x%02x' % rgb
 
-    # Step 3: Calculate the position to overlay the logo
-    logo_position = ((qr_img.size[0] - logo.size[0]) // 2, (qr_img.size[1] - logo.size[1]) // 2)
+# Get filename
+filename = infile.split('.')[0]
 
-    # Step 4: Overlay the logo onto the QR code
-    qr_img.paste(logo, logo_position, logo)
+# Read image
+logo = Image.open(infile)
 
-    # Step 5: Optionally, add text below the QR code
-    if text:
-        qr_img = qr_img.convert("RGB")  # Convert to RGB for text overlay
-        draw = ImageDraw.Draw(qr_img)
+# Convert to RGBA to maintain transparency
+logo_rgb = logo.convert("RGBA") 
 
-        # Define the font and text position
-        try:
-            font_path = "path/to/your/custom_font.ttf"  # Specify your custom font file path
-            font = ImageFont.truetype(font_path, 24)
-        except IOError:
-            font = ImageFont.load_default()  # Fallback to default font if custom font isn't found
+# Calculate the average color of the logo
+data = logo_rgb.getdata()
+r = g = b = a = 0
+num_pixels = len(data)
 
-        # Measure text size and position
-        text_width, text_height = draw.textsize(text, font=font)
-        text_position = ((qr_img.size[0] - text_width) // 2, qr_img.size[1] - text_height - 10)
+for pixel in data:
+    r += pixel[0]
+    g += pixel[1]
+    b += pixel[2]
+    a += pixel[3]
 
-        # Add text onto the image
-        draw.text(text_position, text, font=font, fill="black")
+# Average the color values
+r //= num_pixels
+g //= num_pixels
+b //= num_pixels
 
-    # Step 6: Save the final QR code image
-    qr_img.save(output_path)
-    print(f"QR code saved as {output_path}")
+# If the logo has significant transparency, you might want to adjust how the color is derived
+if a < 255 * 0.5:  # If more than 50% of the pixels are transparent, use a fallback color
+    r, g, b = 0, 0, 0  # Fallback color (black) if the logo is mostly transparent
 
-# Usage
-data = "https://andjelaljubenkovic.rs/"  # Your data
-logo_path = "background_logo.png"  # Path to your logo image
-output_path = "custom_qr_code.png"  # Output path for the QR code
-text = "Scan me for more info"  # Optional text below the QR code
+# Set size of the logo
+basewidth = logosize
+wpercent = (basewidth / float(logo.size[0]))
+hsize = int((float(logo.size[1]) * float(wpercent)))
+logo = logo.resize((basewidth, hsize), Image.LANCZOS)  # Use LANCZOS for resizing
 
-create_qr_with_logo(data, logo_path, output_path, text)
+# Create QR code with high error correction
+qr_big = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H)
+qr_big.add_data(YOUR_TEXT_OR_URL)
+qr_big.make()
+
+# Using the average color of the image for the QR code
+colorcode = rgb_to_hex((r, g, b))
+img_qr_big = qr_big.make_image(fill_color=colorcode, back_color="white").convert('RGB')
+
+# Position the logo in the center of the QR code
+pos = (
+    (img_qr_big.size[0] - logo.size[0]) // 2,
+    (img_qr_big.size[1] - logo.size[1]) // 2
+)
+img_qr_big.paste(logo, pos)
+
+# Create final_QR directory
+try:
+    os.mkdir("final_QR")
+except FileExistsError:
+    print("Folder already exists")
+
+# Save as filenameQR.png format    
+img_qr_big.save(f"final_QR/{filename}QR.png")
